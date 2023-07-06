@@ -1,0 +1,74 @@
+- hosts: machines
+  become: true
+  become_method: su
+  tasks:
+    - name: Installer Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Ajouter la clé GPG officielle de Docker
+      apt_key:
+        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+        state: present
+
+    - name: Ajouter le repository Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Installer Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    - name: Démarrer et activer le service Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Créer le réseau Docker pour Prometheus et Grafana
+      docker_network:
+        name: monitoring_network
+        state: present
+
+    - name: Démarrer le conteneur Prometheus
+      docker_container:
+        name: prometheus
+        image: prom/prometheus
+        ports:
+          - "9090:9090"
+        networks:
+          - name: monitoring_network
+        state: started
+        env:
+          PROMETHEUS_CONFIG: "/etc/prometheus/prometheus.yml"
+      register: prometheus_container
+
+    - name: Démarrer le conteneur Grafana
+      docker_container:
+        name: grafana
+        image: grafana/grafana
+        ports:
+          - "3000:3000"
+        networks:
+          - name: monitoring_network
+        state: started
+
+    - name: Redémarrer le conteneur Prometheus
+      docker_container:
+        name: prometheus
+        state: restarted
+
+    - name: Redémarrer le conteneur Grafana
+      docker_container:
+        name: grafana
+        state: restarted
